@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
 FastAPI server with OpenAI-compatible completion API using GraphQL Agent
+
+IMPORTANT: This example is configured for SubQuery Network data.
+For your own project, you need to customize:
+1. Replace the endpoint URL with your project's GraphQL API
+2. Replace schema.graphql with your project's entity schema
+3. Update the agent prompt to reflect your project's domain and capabilities
+
+See README.md "Custom Agent Prompts" section for detailed guidance.
 """
 
 import asyncio
@@ -50,6 +58,7 @@ class GraphQLAgent:
         print(f"🤖 Using LLM model: {model_name}")
         
         # Load entity schema
+        # Note: This example uses SubQuery Network's schema - replace with your own project's schema
         schema_file_path = os.path.join(os.path.dirname(__file__), "schema.graphql")
         with open(schema_file_path, 'r', encoding='utf-8') as f:
             entity_schema = f.read()
@@ -64,6 +73,12 @@ class GraphQLAgent:
     def _setup_agent(self):
         """Setup the LangChain agent."""
         
+        # IMPORTANT: This prompt is specifically tailored for SubQuery Network example
+        # For your own project, customize this prompt to reflect your specific domain:
+        # - Replace "SubQuery Network" with your project name
+        # - Update the list of capabilities to match your indexed data
+        # - Adjust the decline message to be appropriate for your use case
+        # See README.md "Custom Agent Prompts" section for guidance
         prompt_template = """You are a GraphQL assistant specialized in SubQuery Network data queries. You can help users find information about:
 - Blockchain indexers and their status, performance, and rewards
 - Projects, deployments, and project metadata
@@ -185,6 +200,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize GraphQL agent
     print("🚀 Initializing GraphQL Agent...")
     try:
+        # Note: This example uses SubQuery Network's API - replace with your own project's endpoint
         endpoint = "https://index-api.onfinality.io/sq/subquery/subquery-mainnet"
         agent_executor = GraphQLAgent(endpoint)
         print("✅ GraphQL Agent initialized successfully")

@@ -68,6 +68,12 @@ class GraphQLAgent:
     def _setup_agent(self):
         """Setup the LangChain agent."""
         
+        # IMPORTANT: This prompt is specifically tailored for SubQuery Network example
+        # For your own project, customize this prompt to reflect your specific domain:
+        # - Replace "SubQuery Network" with your project name
+        # - Update the list of capabilities to match your indexed data
+        # - Adjust the decline message to be appropriate for your use case
+        # See README.md "Custom Agent Prompts" section for guidance
         prompt_template = """You are a GraphQL assistant specialized in SubQuery Network data queries. You can help users find information about:
 - Blockchain indexers and their status, performance, and rewards
 - Projects, deployments, and project metadata
