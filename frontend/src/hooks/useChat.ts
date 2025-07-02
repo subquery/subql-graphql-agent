@@ -71,7 +71,7 @@ export function useChat(projectCid: string, messages: ChatMessage[], onMessagesC
   });
 
   // Streaming chat
-  const sendStreamingMessage = useCallback(async (content: string) => {
+  const sendStreamingMessage = useCallback(async (content: string, dataLimit: number = 10) => {
     const userMessage: ChatMessage = {
       role: 'user',
       content,
@@ -91,12 +91,15 @@ export function useChat(projectCid: string, messages: ChatMessage[], onMessagesC
 
     try {
       // Build conversation history including the new user message
+      // Add data limit instruction to the last user message for backend, but keep UI clean
+      const enhancedContent = `${content}\n\n[SYSTEM: When constructing GraphQL queries, limit results to maximum ${dataLimit} records using appropriate pagination (first: ${dataLimit} or limit: ${dataLimit})]`;
+      
       const conversationHistory = [
         ...messages.map(msg => ({
           role: msg.role,
           content: msg.content
         })),
-        { role: 'user', content }
+        { role: 'user', content: enhancedContent }
       ];
 
       const request: ChatCompletionRequest = {

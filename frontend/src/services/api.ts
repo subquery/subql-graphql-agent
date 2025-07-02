@@ -13,8 +13,6 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-console.log('API Base URL:', API_BASE_URL);
-
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -25,11 +23,9 @@ export const api = axios.create({
 // Add request interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    console.log('API Request:', config.method?.toUpperCase(), config.url, config.data);
     return config;
   },
   (error) => {
-    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
@@ -37,54 +33,62 @@ api.interceptors.request.use(
 // Add response interceptor for debugging
 api.interceptors.response.use(
   (response) => {
-    console.log('API Response:', response.status, response.config.url, response.data);
     return response;
   },
   (error) => {
-    console.error('API Response Error:', {
-      status: error.response?.status,
-      url: error.config?.url,
-      data: error.response?.data,
-      message: error.message,
-    });
     return Promise.reject(error);
   }
 );
 
+export function getUserId() {
+  let userId = localStorage.getItem('userId');
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem('userId', userId);
+  }
+  return userId;
+}
+
 export const projectsApi = {
   // Register a new project
   register: async (request: RegisterProjectRequest): Promise<RegisterProjectResponse> => {
-    const response = await api.post<RegisterProjectResponse>('/register', request);
+    const userId = getUserId();
+    const response = await api.post<RegisterProjectResponse>(`/register?user_id=${encodeURIComponent(userId)}`, request);
     return response.data;
   },
 
   // List all projects
   list: async (): Promise<ProjectsListResponse> => {
-    const response = await api.get<ProjectsListResponse>('/projects');
+    const userId = getUserId();
+    const response = await api.get<ProjectsListResponse>(`/projects?user_id=${encodeURIComponent(userId)}`);
     return response.data;
   },
 
   // Get project configuration
   getConfig: async (cid: string): Promise<ProjectConfig> => {
-    const response = await api.get<ProjectConfig>(`/projects/${cid}`);
+    const userId = getUserId();
+    const response = await api.get<ProjectConfig>(`/projects/${cid}?user_id=${encodeURIComponent(userId)}`);
     return response.data;
   },
 
   // Update project configuration
   updateConfig: async (cid: string, updates: UpdateProjectConfigRequest): Promise<ProjectConfig> => {
-    const response = await api.patch<ProjectConfig>(`/projects/${cid}`, updates);
+    const userId = getUserId();
+    const response = await api.patch<ProjectConfig>(`/projects/${cid}?user_id=${encodeURIComponent(userId)}`, updates);
     return response.data;
   },
 
   // Delete project
   delete: async (cid: string): Promise<{ cid: string; deleted: boolean; message: string }> => {
-    const response = await api.delete(`/projects/${cid}`);
+    const userId = getUserId();
+    const response = await api.delete(`/projects/${cid}?user_id=${encodeURIComponent(userId)}`);
     return response.data;
   },
 
   // Chat with project (non-streaming)
   chat: async (cid: string, request: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
-    const response = await api.post<ChatCompletionResponse>(`/${cid}/chat/completions`, request);
+    const userId = getUserId();
+    const response = await api.post<ChatCompletionResponse>(`/${cid}/chat/completions?user_id=${encodeURIComponent(userId)}`, request);
     return response.data;
   },
 
@@ -101,8 +105,8 @@ export const chatApi = {
     cid: string, 
     request: ChatCompletionRequest
   ): AsyncGenerator<string, void, unknown> {
-    const url = `${API_BASE_URL}/${cid}/chat/completions`;
-    console.log('Streaming chat to:', url);
+    const userId = getUserId();
+    const url = `${API_BASE_URL}/${cid}/chat/completions?user_id=${encodeURIComponent(userId)}`;
     
     const response = await fetch(url, {
       method: 'POST',

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useRegisterProject } from '../hooks/useProjects';
 import { validateCid } from '../lib/utils';
+import { getUserId } from '../services/api';
 
 interface ProjectRegistrationProps {
   onSuccess?: () => void;
@@ -26,7 +27,7 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
     try {
       await registerProject.mutateAsync({ 
         cid: cid.trim(),
-        endpoint: endpoint.trim() || undefined
+        endpoint: endpoint.trim() || undefined,
       });
       setCid('');
       setEndpoint('');

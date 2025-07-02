@@ -14,7 +14,69 @@ interface ChatInterfaceProps {
 
 // 新增：可折叠的think块组件
 function ThinkBlock({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false); // 默认展开
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // 极速响应内容变化
+  useEffect(() => {
+    if (!collapsed && contentRef.current) {
+      const scrollToBottom = () => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+      };
+      
+      // 立即滚动
+      scrollToBottom();
+      
+      // 连续快速滚动确保到位
+      requestAnimationFrame(scrollToBottom);
+      setTimeout(scrollToBottom, 1);
+      setTimeout(scrollToBottom, 10);
+      
+      return () => {};
+    }
+  }, [children, collapsed]);
+
+  // 高效快速滚动机制
+  useEffect(() => {
+    if (!collapsed && contentRef.current) {
+      const scrollToBottom = () => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+      };
+
+      // 1. MutationObserver 立即响应内容变化
+      const observer = new MutationObserver(() => {
+        scrollToBottom();
+        // 额外确保滚动到位
+        requestAnimationFrame(scrollToBottom);
+      });
+
+      observer.observe(contentRef.current, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+
+      // 2. 高频定时器 (每25ms, 40fps)
+      const fastInterval = setInterval(scrollToBottom, 25);
+
+      // 3. ResizeObserver 监听容器大小变化
+      const resizeObserver = new ResizeObserver(() => {
+        scrollToBottom();
+      });
+      resizeObserver.observe(contentRef.current);
+
+      return () => {
+        observer.disconnect();
+        resizeObserver.disconnect();
+        clearInterval(fastInterval);
+      };
+    }
+  }, [collapsed]);
+
   return (
     <div className="think-block my-2">
       <div
@@ -25,7 +87,9 @@ function ThinkBlock({ children }: { children: React.ReactNode }) {
         <span>{collapsed ? 'Show tool reasoning / intermediate results' : 'Hide tool reasoning / intermediate results'}</span>
         <svg className={`ml-1 w-3 h-3 transition-transform ${collapsed ? '' : 'rotate-90'}`} viewBox="0 0 8 8"><path d="M2 2l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
       </div>
-      <div className={`think-content bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono whitespace-pre-wrap transition-all duration-200 ${collapsed ? 'max-h-0 overflow-hidden' : 'max-h-96'}`}
+      <div 
+        ref={contentRef}
+        className={`think-content bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono whitespace-pre-wrap transition-all duration-200 ${collapsed ? 'max-h-0 overflow-hidden' : 'max-h-96 overflow-y-auto'}`}
         style={{marginTop: collapsed ? 0 : 4}}
       >
         {children}
@@ -74,16 +138,33 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
   
   const [input, setInput] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
+  const [dataLimit, setDataLimit] = useState(10);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  const scrollToBottom = (immediate: boolean = false) => {
+    const behavior = immediate ? 'auto' : 'smooth';
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+    }, immediate ? 0 : 50);
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // More aggressive scrolling during streaming to keep up with content updates
+  useEffect(() => {
+    if (isStreaming) {
+      // Immediate scroll when streaming starts
+      scrollToBottom(true);
+      
+      // Then continuous smooth scrolling
+      const interval = setInterval(() => scrollToBottom(true), 100);
+      return () => clearInterval(interval);
+    }
+  }, [isStreaming]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,10 +174,10 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
     setInput('');
     
     if (useStreaming) {
-      await sendStreamingMessage(message);
+      await sendStreamingMessage(message, dataLimit);
     } else {
       // For now, we'll use streaming by default
-      await sendStreamingMessage(message);
+      await sendStreamingMessage(message, dataLimit);
     }
   };
 
@@ -238,20 +319,46 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
           </div>
           
           {/* Options */}
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={useStreaming}
-                  onChange={(e) => setUseStreaming(e.target.checked)}
-                  className="rounded border-border"
-                />
-                <span>Stream responses</span>
-              </label>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={useStreaming}
+                    onChange={(e) => setUseStreaming(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span>Stream responses</span>
+                </label>
+              </div>
+              <div className="text-gray-500">
+                Press Enter to send, Shift+Enter for new line
+              </div>
             </div>
-            <div className="text-gray-500">
-              Press Enter to send, Shift+Enter for new line
+            
+            {/* Data Limit Slider */}
+            <div className="flex items-center space-x-3 text-sm">
+              <label className="text-gray-700 font-medium min-w-fit">
+                Query limit:
+              </label>
+              <div className="flex-1 flex items-center space-x-3">
+                <span className="text-gray-500 text-xs">1</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={dataLimit}
+                  onChange={(e) => setDataLimit(parseInt(e.target.value))}
+                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                />
+                <span className="text-gray-500 text-xs">50</span>
+              </div>
+              <div className="min-w-fit">
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                  {dataLimit} records
+                </span>
+              </div>
             </div>
           </div>
         </form>

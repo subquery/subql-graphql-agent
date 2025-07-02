@@ -37,7 +37,7 @@ except ImportError:
     pass  # dotenv is optional for development
 
 import httpx
-from fastapi import FastAPI, HTTPException, Path as PathParam
+from fastapi import FastAPI, HTTPException, Path as PathParam, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -311,8 +311,8 @@ class ProjectManager:
     """Manages SubQuery projects and their configurations."""
     
     def __init__(self):
-        self.projects: Dict[str, ProjectConfig] = {}
-        self.agent_cache: Dict[str, tuple] = {}  # cid -> (agent, timestamp)
+        self.projects: Dict[str, Dict[str, ProjectConfig]] = {}
+        self.agent_cache: Dict[tuple, tuple] = {}  # (user_id, cid) -> (agent, timestamp)
         self._shared_llm = None  # Cached LLM instance for analysis
         PROJECTS_DIR.mkdir(exist_ok=True)
         self._load_projects()
@@ -329,81 +329,73 @@ class ProjectManager:
             print(f"🤖 Initialized shared LLM: {model_name}")
         return self._shared_llm
     
-    def _get_project_file(self, cid: str) -> Path:
-        """Get the file path for a project configuration."""
-        return PROJECTS_DIR / f"{cid}.json"
+    def _get_project_file(self, user_id: str, cid: str) -> Path:
+        """Get the file path for a user's project config."""
+        user_dir = PROJECTS_DIR / user_id
+        user_dir.mkdir(parents=True, exist_ok=True)
+        return user_dir / f"{cid}.json"
     
     def _load_projects(self):
-        """Load all projects from disk."""
-        for project_file in PROJECTS_DIR.glob("*.json"):
-            try:
-                with open(project_file, 'r') as f:
-                    data = json.load(f)
-                    config = ProjectConfig(**data)
-                    self.projects[config.cid] = config
-                    print(f"📁 Loaded project: {config.cid}")
-            except Exception as e:
-                print(f"❌ Failed to load project {project_file}: {e}")
+        """Load all projects from disk into memory, grouped by user_id."""
+        self.projects.clear()
+        if not PROJECTS_DIR.exists():
+            return
+        for user_dir in PROJECTS_DIR.iterdir():
+            if user_dir.is_dir():
+                user_id = user_dir.name
+                self.projects[user_id] = {}
+                for file in user_dir.glob("*.json"):
+                    try:
+                        with open(file, "r") as f:
+                            data = json.load(f)
+                            config = ProjectConfig(**data)
+                            self.projects[user_id][config.cid] = config
+                            print(f"📁 Loaded project: {config.cid} for user {user_id}")
+                    except Exception as e:
+                        print(f"❌ Failed to load project {file}: {e}")
     
-    def _save_project(self, config: ProjectConfig):
-        """Save a project configuration to disk."""
-        project_file = self._get_project_file(config.cid)
-        with open(project_file, 'w') as f:
+    def _save_project(self, user_id: str, config: ProjectConfig):
+        """Save a user's project config to disk."""
+        file = self._get_project_file(user_id, config.cid)
+        with open(file, "w") as f:
             json.dump(asdict(config), f, indent=2)
     
-    async def register_project(self, cid: str, endpoint: Optional[str] = None) -> ProjectConfig:
-        """Register a new project from IPFS CID."""
-        if cid in self.projects:
-            return self.projects[cid]
-        
+    async def register_project(self, user_id: str, cid: str, endpoint: Optional[str] = None) -> ProjectConfig:
+        """Register a new project from IPFS CID for a specific user."""
+        if user_id in self.projects and cid in self.projects[user_id]:
+            return self.projects[user_id][cid]
         try:
             # Fetch manifest from IPFS using cat API
             print(f"📁 Fetching project manifest for CID: {cid}")
             manifest_content = await fetch_from_ipfs(cid)
-            
-            # Parse manifest (assuming YAML format)
+            # Parse manifest (YAML or JSON)
             try:
                 manifest = yaml.safe_load(manifest_content)
             except yaml.YAMLError:
-                # Try JSON format as fallback
                 manifest = json.loads(manifest_content)
-            
-            # Extract schema path and endpoint
             schema_path = manifest.get('schema', {}).get('file', 'schema.graphql')
-            
-            # Use provided endpoint or try to get from manifest or construct default
             if not endpoint:
                 if 'network' in manifest and 'endpoint' in manifest['network']:
                     endpoint = manifest['network']['endpoint']
                 elif 'endpoint' in manifest:
                     endpoint = manifest['endpoint']
                 else:
-                    # If no endpoint provided and none in manifest, use SubQuery Network default
                     endpoint = f"https://api.subquery.network/sq/{cid}"
-            
-            # Fetch schema.graphql from IPFS
             if schema_path.startswith('http'):
-                # External schema URL, fetch directly
                 print(f"🔍 Fetching schema from external URL: {schema_path}")
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     schema_response = await client.get(schema_path)
                     schema_response.raise_for_status()
                     schema_content = schema_response.text
             elif schema_path.startswith('ipfs://'):
-                # IPFS URL with separate CID
                 schema_cid = schema_path.replace('ipfs://', '')
                 print(f"📄 Fetching schema from separate IPFS CID: {schema_cid}")
                 schema_content = await fetch_from_ipfs(schema_cid)
             else:
-                # Schema file within the same IPFS directory
                 print(f"📄 Fetching schema file: {schema_path}")
                 schema_content = await fetch_from_ipfs(cid, schema_path)
-            
-            # Analyze project with LLM to generate intelligent defaults
             shared_llm = self._get_shared_llm()
             llm_analysis = await analyze_project_with_llm(manifest, schema_content, shared_llm)
-            
-            # Create project configuration with LLM-generated defaults
             config = ProjectConfig(
                 cid=cid,
                 endpoint=endpoint,
@@ -413,30 +405,29 @@ class ProjectManager:
                 decline_message=llm_analysis["decline_message"],
                 suggested_questions=llm_analysis.get("suggested_questions", [])
             )
-            
             # Save to disk and memory
-            self._save_project(config)
-            self.projects[cid] = config
-            
-            print(f"✅ Registered project: {llm_analysis['domain_name']} ({cid})")
+            self._save_project(user_id, config)
+            if user_id not in self.projects:
+                self.projects[user_id] = {}
+            self.projects[user_id][cid] = config
+            print(f"✅ Registered project: {llm_analysis['domain_name']} ({cid}) for user {user_id}")
             return config
-            
         except Exception as e:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Failed to register project {cid}: {str(e)}"
             )
     
-    def get_project(self, cid: str) -> Optional[ProjectConfig]:
-        """Get a project configuration."""
-        return self.projects.get(cid)
+    def get_project(self, user_id: str, cid: str) -> Optional[ProjectConfig]:
+        """Get a project configuration for a user."""
+        return self.projects.get(user_id, {}).get(cid)
     
     def update_project_config(self, cid: str, **updates) -> ProjectConfig:
         """Update project configuration."""
         if cid not in self.projects:
             raise HTTPException(status_code=404, detail=f"Project {cid} not found")
         
-        config = self.projects[cid]
+        config = self.projects[cid][cid]
         
         # Update fields
         for field, value in updates.items():
@@ -444,7 +435,7 @@ class ProjectManager:
                 setattr(config, field, value)
         
         # Save changes
-        self._save_project(config)
+        self._save_project(cid, config)
         
         # Invalidate agent cache
         if cid in self.agent_cache:
@@ -453,28 +444,25 @@ class ProjectManager:
         print(f"🔄 Updated project config: {cid}")
         return config
     
-    def get_agent(self, cid: str) -> 'GraphQLAgent':
-        """Get or create a cached agent for the project."""
+    def get_agent(self, user_id: str, cid: str) -> 'GraphQLAgent':
+        """Get or create a cached agent for the project (per user)."""
         current_time = time.time()
-        
+        cache_key = (user_id, cid)
         # Check cache
-        if cid in self.agent_cache:
-            agent, timestamp = self.agent_cache[cid]
+        if cache_key in self.agent_cache:
+            agent, timestamp = self.agent_cache[cache_key]
             if current_time - timestamp < CACHE_TTL:
                 return agent
             else:
                 # Cache expired
-                del self.agent_cache[cid]
-        
+                del self.agent_cache[cache_key]
         # Create new agent
-        config = self.get_project(cid)
+        config = self.get_project(user_id, cid)
         if not config:
-            raise HTTPException(status_code=404, detail=f"Project {cid} not found")
-        
+            raise HTTPException(status_code=404, detail=f"Project {cid} not found for user {user_id}")
         agent = GraphQLAgent(config)
-        self.agent_cache[cid] = (agent, current_time)
-        
-        print(f"🤖 Created agent for project: {cid}")
+        self.agent_cache[cache_key] = (agent, current_time)
+        print(f"🤖 Created agent for project: {cid} (user: {user_id})")
         return agent
     
     def delete_project(self, cid: str) -> bool:
@@ -483,31 +471,40 @@ class ProjectManager:
             raise HTTPException(status_code=404, detail=f"Project {cid} not found")
         
         # Remove from memory
-        del self.projects[cid]
+        del self.projects[cid][cid]
         
         # Remove cached agent
         if cid in self.agent_cache:
             del self.agent_cache[cid]
         
         # Remove from disk
-        project_file = self._get_project_file(cid)
+        project_file = self._get_project_file(cid, cid)
         if project_file.exists():
             project_file.unlink()
         
         print(f"🗑️ Deleted project: {cid}")
         return True
     
-    def list_projects(self) -> List[Dict[str, Any]]:
-        """List all registered projects."""
-        return [
-            {
-                "cid": config.cid,
-                "domain_name": config.domain_name,
-                "endpoint": config.endpoint,
-                "cached": config.cid in self.agent_cache
-            }
-            for config in self.projects.values()
-        ]
+    def list_projects(self, user_id: str) -> List[Dict[str, Any]]:
+        """List all registered projects for a user by reading the user's project directory."""
+        user_dir = PROJECTS_DIR / user_id
+        projects = []
+        if not user_dir.exists() or not user_dir.is_dir():
+            return []
+        for file in user_dir.glob("*.json"):
+            try:
+                with open(file, "r") as f:
+                    data = json.load(f)
+                    config = ProjectConfig(**data)
+                    projects.append({
+                        "cid": config.cid,
+                        "domain_name": config.domain_name,
+                        "endpoint": config.endpoint,
+                        "cached": config.cid in self.agent_cache
+                    })
+            except Exception as e:
+                print(f"❌ Failed to load project {file}: {e}")
+        return projects
 
 class GraphQLAgent:
     """GraphQL agent for a specific SubQuery project."""
@@ -561,7 +558,7 @@ class GraphQLAgent:
             verbose=True,
             max_iterations=6,
             max_execution_time=180,
-            handle_parsing_errors="Check your output and make sure it conforms! Always respond with Thought: and Action:",
+            handle_parsing_errors="After calling graphql_execute and getting results, you must provide:\nThought: I have the query results\nFinal Answer: [user-friendly summary of the data]",
             return_intermediate_steps=True
         )
     
@@ -569,6 +566,7 @@ class GraphQLAgent:
         """Truly streaming: use self.executor.astream to yield tool observations and final output step by step, chunked."""
         think_started = False
         chunk_size = 60
+            
         try:
             print(f"🔍 [astream] Processing query for {self.config.cid}: {user_input}")
             async for event in self.executor.astream({"input": user_input}):
@@ -606,7 +604,9 @@ class GraphQLAgent:
                     if think_started:
                         yield "</think>\n"
                         think_started = False
+                    
                     output = event["output"].strip()
+                    
                     idx = 0
                     while idx < len(output):
                         chunk = output[idx:idx+chunk_size]
@@ -631,7 +631,7 @@ async def lifespan(app: FastAPI):
     print(f"🔗 IPFS API: {IPFS_API_URL}")
     
     # Load existing projects
-    project_count = len(project_manager.projects)
+    project_count = sum(len(projects) for projects in project_manager.projects.values())
     if project_count > 0:
         print(f"✅ Loaded {project_count} existing projects")
     
@@ -707,10 +707,10 @@ class ChatCompletionChunk(BaseModel):
 # API Endpoints
 
 @app.post("/register", response_model=RegisterProjectResponse)
-async def register_project(request: RegisterProjectRequest):
-    """Register a new SubQuery project from IPFS CID."""
-    config = await project_manager.register_project(request.cid, request.endpoint)
-    
+async def register_project(request: RegisterProjectRequest, user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
+    config = await project_manager.register_project(user_id, request.cid, request.endpoint)
     return RegisterProjectResponse(
         cid=config.cid,
         domain_name=config.domain_name,
@@ -719,20 +719,22 @@ async def register_project(request: RegisterProjectRequest):
     )
 
 @app.get("/projects")
-async def list_projects():
-    """List all registered projects."""
+async def list_projects(user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
+    projects = project_manager.list_projects(user_id)
     return {
-        "projects": project_manager.list_projects(),
-        "total": len(project_manager.projects)
+        "projects": projects,
+        "total": len(projects)
     }
 
 @app.get("/projects/{cid}")
-async def get_project(cid: str = PathParam(..., description="Project CID")):
-    """Get project configuration."""
-    config = project_manager.get_project(cid)
+async def get_project(cid: str = PathParam(..., description="Project CID"), user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
+    config = project_manager.get_project(user_id, cid)
     if not config:
-        raise HTTPException(status_code=404, detail=f"Project {cid} not found")
-    
+        raise HTTPException(status_code=404, detail=f"Project {cid} not found for user {user_id}")
     return {
         "cid": config.cid,
         "domain_name": config.domain_name,
@@ -744,14 +746,11 @@ async def get_project(cid: str = PathParam(..., description="Project CID")):
     }
 
 @app.patch("/projects/{cid}")
-async def update_project_config(
-    cid: str,
-    request: UpdateProjectConfigRequest
-):
-    """Update project configuration."""
+async def update_project_config(cid: str, request: UpdateProjectConfigRequest, user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
     updates = {k: v for k, v in request.dict().items() if v is not None}
-    config = project_manager.update_project_config(cid, **updates)
-    
+    config = project_manager.update_project_config(user_id, cid, **updates)
     return {
         "cid": config.cid,
         "domain_name": config.domain_name,
@@ -762,10 +761,10 @@ async def update_project_config(
     }
 
 @app.delete("/projects/{cid}")
-async def delete_project(cid: str):
-    """Delete a project and its configuration."""
-    success = project_manager.delete_project(cid)
-    
+async def delete_project(cid: str, user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
+    success = project_manager.delete_project(user_id, cid)
     return {
         "cid": cid,
         "deleted": success,
@@ -773,13 +772,10 @@ async def delete_project(cid: str):
     }
 
 @app.post("/{cid}/chat/completions")
-async def project_chat_completions(
-    cid: str,
-    request: ChatCompletionRequest
-):
-    """OpenAI compatible chat completions endpoint for a specific project."""
-    # Get agent for this project
-    agent = project_manager.get_agent(cid)
+async def project_chat_completions(cid: str, request: ChatCompletionRequest, user_id: str = Query(None)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required as query parameter")
+    agent = project_manager.get_agent(user_id, cid)
     
     # Extract user message (last message)
     user_messages = [msg for msg in request.messages if msg.role == "user"]
@@ -804,7 +800,10 @@ async def non_stream_chat_completion(
     """Handle non-streaming chat completion."""
     try:
         # Process query through GraphQL agent
-        response_content = await agent.query(user_input)
+        response_parts = []
+        async for chunk in agent.query(user_input):
+            response_parts.append(chunk)
+        response_content = "".join(response_parts)
         
         return ChatCompletionResponse(
             id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
@@ -840,12 +839,10 @@ async def stream_chat_completion(
     try:
         # 直接异步迭代agent.query，分块流式输出think块和output
         async for part in agent.query(user_input):
-            print(f"[DEBUG] stream_chat_completion: got part (len={len(part)}):\n{part[:200]}...\n---")
             chunk_size = 60
             idx = 0
             while idx < len(part):
                 chunk_content = part[idx:idx+chunk_size]
-                print(f"[DEBUG] stream_chat_completion: yield chunk (len={len(chunk_content)}):\n{chunk_content[:200]}\n---")
                 chunk = ChatCompletionChunk(
                     id=completion_id,
                     created=created,
@@ -860,7 +857,6 @@ async def stream_chat_completion(
                 await asyncio.sleep(0.05)
                 idx += chunk_size
         # Final chunk
-        print(f"[DEBUG] stream_chat_completion: yield final chunk [DONE]")
         final_chunk = ChatCompletionChunk(
             id=completion_id,
             created=created,
@@ -874,7 +870,6 @@ async def stream_chat_completion(
         yield f"data: {final_chunk.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
     except Exception as e:
-        print(f"[DEBUG] stream_chat_completion: yield error: {str(e)}")
         error_chunk = ChatCompletionChunk(
             id=completion_id,
             created=created,
@@ -924,7 +919,7 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "projects_count": len(project_manager.projects),
+        "projects_count": sum(len(projects) for projects in project_manager.projects.values()),
         "cached_agents": len(project_manager.agent_cache),
         "ipfs_api": IPFS_API_URL
     }
