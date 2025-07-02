@@ -12,6 +12,58 @@ interface ChatInterfaceProps {
   onClearMessages: () => void;
 }
 
+// 新增：可折叠的think块组件
+function ThinkBlock({ children }: { children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(true);
+  return (
+    <div className="think-block my-2">
+      <div
+        className="think-toggle cursor-pointer text-xs text-gray-500 select-none mb-1 flex items-center"
+        onClick={() => setCollapsed((c) => !c)}
+      >
+        <span className="mr-1">💡</span>
+        <span>{collapsed ? 'Show tool reasoning / intermediate results' : 'Hide tool reasoning / intermediate results'}</span>
+        <svg className={`ml-1 w-3 h-3 transition-transform ${collapsed ? '' : 'rotate-90'}`} viewBox="0 0 8 8"><path d="M2 2l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+      </div>
+      <div className={`think-content bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono whitespace-pre-wrap transition-all duration-200 ${collapsed ? 'max-h-0 overflow-hidden' : 'max-h-96'}`}
+        style={{marginTop: collapsed ? 0 : 4}}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// 辅助：将<think>标签内容替换为ThinkBlock组件
+function renderWithThinkBlocks(content: string) {
+  const parts: React.ReactNode[] = [];
+  let lastIdx = 0;
+  const regex = /<think>([\s\S]*?)<\/think>/g;
+  let match;
+  let idx = 0;
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push(content.slice(lastIdx, match.index));
+    }
+    parts.push(<ThinkBlock key={idx++}>{match[1]}</ThinkBlock>);
+    lastIdx = regex.lastIndex;
+  }
+  // 检查是否有未闭合的think块
+  const openIdx = content.lastIndexOf('<think>');
+  const closeIdx = content.lastIndexOf('</think>');
+  if (openIdx > closeIdx) {
+    // 有未闭合的think块
+    parts.push(
+      <ThinkBlock key={idx++}>
+        {content.slice(openIdx + 7)}
+      </ThinkBlock>
+    );
+  } else if (lastIdx < content.length) {
+    parts.push(content.slice(lastIdx));
+  }
+  return parts;
+}
+
 export function ChatInterface({ projectCid, messages, onMessagesChange, onClearMessages }: ChatInterfaceProps) {
   const { data: project } = useProject(projectCid);
   const {
@@ -127,7 +179,9 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
                 }`}
               >
                 <div className="whitespace-pre-wrap break-words">
-                  {message.content}
+                  {message.role === 'assistant'
+                    ? renderWithThinkBlocks(message.content)
+                    : message.content}
                 </div>
                 <div
                   className={`text-xs mt-2 opacity-70 ${

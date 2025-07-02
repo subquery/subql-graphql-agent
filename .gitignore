@@ -235,3 +235,5 @@ cache/
 
 # UV lock file (if using UV package manager)
 uv.lock
+
+projects

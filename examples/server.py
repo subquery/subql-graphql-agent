@@ -565,90 +565,60 @@ class GraphQLAgent:
             return_intermediate_steps=True
         )
     
-    async def query(self, user_input: str) -> str:
-        """Process a user query."""
-        intermediate_steps = []
+    async def query(self, user_input: str):
+        """Truly streaming: use self.executor.astream to yield tool observations and final output step by step, chunked."""
+        think_started = False
+        chunk_size = 60
         try:
-            print(f"🔍 Processing query for {self.config.cid}: {user_input}")
-            result = await self.executor.ainvoke({"input": user_input})
-            
-            output = result.get("output", "")
-            intermediate_steps = result.get("intermediate_steps", [])
-            
-            print(f"🔍 Agent execution result: output={bool(output)}, steps={len(intermediate_steps)}")
-            
-            # Handle cases where agent stops due to limits or parsing errors
-            if (not output or "iteration limit" in output or "time limit" in output or "stopped" in output.lower() or "Invalid Format" in output) and intermediate_steps:
-                print("🔧 Agent stopped due to limits, extracting results from intermediate steps...")
-                
-                # Look for GraphQL execution results
-                graphql_results = []
-                for i, step in enumerate(intermediate_steps):
-                    if len(step) >= 2:
-                        action, observation = step[0], step[1]
-                        print(f"🔍 Step {i}: tool={getattr(action, 'tool', 'unknown')}, observation_preview={str(observation)[:100]}...")
-                        
-                        # Check for GraphQL tool execution
-                        if hasattr(action, 'tool') and ('execute' in action.tool.lower() or 'graphql' in action.tool.lower()):
-                            if "Query executed successfully" in observation or "data" in observation:
-                                graphql_results.append(observation)
-                                print(f"✅ Found GraphQL result in step {i}")
-                        
-                        # Also check if observation contains JSON-like data
-                        elif observation and ('{' in observation and '}' in observation):
-                            graphql_results.append(observation)
-                            print(f"✅ Found JSON data in step {i}")
-                
-                if graphql_results:
-                    # Use LLM to summarize the results
-                    last_result = graphql_results[-1]
-                    summary_prompt = f"""The user asked: "{user_input}"
-
-A GraphQL query was executed successfully with this result:
-{last_result}
-
-Please provide a clear, user-friendly summary of this data that directly answers the user's question. Don't mention technical details about GraphQL or JSON format."""
-                    
-                    from langchain.schema import HumanMessage
-                    summary_response = self.llm.invoke([HumanMessage(content=summary_prompt)])
-                    output = summary_response.content
-                    print("✅ Generated summary from intermediate results")
-            
-            print(f"📤 Final result for {self.config.cid}: {output[:200]}...")
-            return output if output else "No response generated"
-            
+            print(f"🔍 [astream] Processing query for {self.config.cid}: {user_input}")
+            async for event in self.executor.astream({"input": user_input}):
+                # Tool step event (chunked streaming)
+                if event.get("steps"):
+                    if not think_started:
+                        yield "<think>\n"
+                        think_started = True
+                    for step in event["steps"]:
+                        action = getattr(step, 'action', None)
+                        observation = getattr(step, 'observation', None)
+                        if action:
+                            tool_name = getattr(action, 'tool', 'tool')
+                            log = getattr(action, 'log', '')
+                            header = f"[Tool: {tool_name}]\n"
+                            yield header
+                            # Chunked yield for log
+                            idx = 0
+                            while idx < len(log):
+                                chunk = log[idx:idx+chunk_size]
+                                yield chunk
+                                idx += chunk_size
+                        # Chunked yield for observation (tool output)
+                        if observation:
+                            yield "\n[Tool Output]:\n"
+                            idx = 0
+                            while idx < len(observation):
+                                chunk = observation[idx:idx+chunk_size]
+                                yield chunk
+                                idx += chunk_size
+                        yield "\n\n"
+                # Final answer event: 只要有 'output' 字段且非空
+                if event.get("output"):
+                    # 先关闭 think block（如果还没关）
+                    if think_started:
+                        yield "</think>\n"
+                        think_started = False
+                    output = event["output"].strip()
+                    idx = 0
+                    while idx < len(output):
+                        chunk = output[idx:idx+chunk_size]
+                        yield chunk
+                        idx += chunk_size
+            # 兜底：如果有 think block 没关
+            if think_started:
+                yield "</think>\n"
         except Exception as e:
-            print(f"❌ Query failed for {self.config.cid}: {str(e)}")
-            
-            # Check if it's a parsing error with successful GraphQL execution
-            if "Invalid Format" in str(e) and intermediate_steps:
-                print("🔧 Parsing error detected, attempting to extract from cached intermediate results...")
-                
-                # Use the intermediate_steps we already have
-                for i, step in enumerate(intermediate_steps):
-                    if len(step) >= 2:
-                        action, observation = step[0], step[1]
-                        print(f"🔍 Checking step {i}: {str(observation)[:100]}...")
-                        if observation and ('{' in observation and '}' in observation):
-                            print(f"✅ Using result from step {i}")
-                            
-                            # Use LLM to format the result nicely
-                            try:
-                                summary_prompt = f"""The user asked: "{user_input}"
-
-A GraphQL query was executed successfully with this result:
-{observation}
-
-Please provide a clear, user-friendly summary of this data that directly answers the user's question. Don't mention technical details about GraphQL or JSON format."""
-                                
-                                from langchain.schema import HumanMessage
-                                summary_response = self.llm.invoke([HumanMessage(content=summary_prompt)])
-                                return summary_response.content
-                            except:
-                                # If LLM summary fails, return raw data
-                                return f"Here's the data from your query:\n\n{observation}"
-            
-            return f"I encountered an issue processing your query. Error: {str(e)}"
+            print(f"❌ [astream] Query failed for {self.config.cid}: {str(e)}")
+            yield f"I encountered an issue processing your query. Error: {str(e)}"
+            return
 
 # Global project manager
 project_manager = ProjectManager()
@@ -867,34 +837,30 @@ async def stream_chat_completion(
     """Handle streaming chat completion."""
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     created = int(time.time())
-    
     try:
-        # Process query through GraphQL agent
-        response_content = await agent.query(user_input)
-        
-        # Split response into chunks for streaming
-        words = response_content.split()
-        chunk_size = 3  # Send 3 words at a time
-        
-        for i in range(0, len(words), chunk_size):
-            chunk_words = words[i:i + chunk_size]
-            chunk_content = " " + " ".join(chunk_words) if i > 0 else " ".join(chunk_words)
-            
-            chunk = ChatCompletionChunk(
-                id=completion_id,
-                created=created,
-                model=request.model,
-                choices=[{
-                    "index": 0,
-                    "delta": {"content": chunk_content},
-                    "finish_reason": None
-                }]
-            )
-            
-            yield f"data: {chunk.model_dump_json()}\n\n"
-            await asyncio.sleep(0.05)  # Small delay for streaming effect
-        
+        # 直接异步迭代agent.query，分块流式输出think块和output
+        async for part in agent.query(user_input):
+            print(f"[DEBUG] stream_chat_completion: got part (len={len(part)}):\n{part[:200]}...\n---")
+            chunk_size = 60
+            idx = 0
+            while idx < len(part):
+                chunk_content = part[idx:idx+chunk_size]
+                print(f"[DEBUG] stream_chat_completion: yield chunk (len={len(chunk_content)}):\n{chunk_content[:200]}\n---")
+                chunk = ChatCompletionChunk(
+                    id=completion_id,
+                    created=created,
+                    model=request.model,
+                    choices=[{
+                        "index": 0,
+                        "delta": {"content": chunk_content},
+                        "finish_reason": None
+                    }]
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
+                await asyncio.sleep(0.05)
+                idx += chunk_size
         # Final chunk
+        print(f"[DEBUG] stream_chat_completion: yield final chunk [DONE]")
         final_chunk = ChatCompletionChunk(
             id=completion_id,
             created=created,
@@ -905,11 +871,10 @@ async def stream_chat_completion(
                 "finish_reason": "stop"
             }]
         )
-        
         yield f"data: {final_chunk.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
-        
     except Exception as e:
+        print(f"[DEBUG] stream_chat_completion: yield error: {str(e)}")
         error_chunk = ChatCompletionChunk(
             id=completion_id,
             created=created,
