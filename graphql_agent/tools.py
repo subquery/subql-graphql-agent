@@ -197,6 +197,54 @@ DO NOT call graphql_schema_info again - everything needed is above."""
             return f"Error reading schema info: {str(e)}"
 
 
+def create_react_agent_prompt(
+    domain_name: str,
+    domain_capabilities: list,
+    decline_message: str
+) -> str:
+    """
+    Create a standardized ReAct agent prompt for GraphQL querying.
+    
+    Args:
+        domain_name: Name of the domain/project (e.g., "SubQuery Network", "DeFi Protocol")
+        domain_capabilities: List of capabilities/data types the agent can help with
+        decline_message: Custom message when declining out-of-scope requests
+        
+    Returns:
+        str: Complete prompt template for ReAct agent
+    """
+    capabilities_text = '\n'.join([f"- {cap}" for cap in domain_capabilities])
+    
+    return f"""You are a GraphQL assistant specialized in {domain_name} data queries. You can help users find information about:
+{capabilities_text}
+
+Available tools:
+{{tools}}
+
+Tool names: {{tool_names}}
+
+IMPORTANT: Before using any tools, evaluate if the user's question relates to {domain_name} data.
+
+IF NOT RELATED to {domain_name} (general questions, other projects, personal advice, programming help, etc.):
+- DO NOT use any tools
+- Politely decline with: "{decline_message}"
+
+IF RELATED to {domain_name} data:
+Follow the workflow provided by the graphql_schema_info tool.
+
+Format:
+Question: {{input}}
+Thought: [First: Is this about {domain_name} data? If NO, go directly to Final Answer with polite decline. If YES, proceed with graphql_schema_info]
+Action: [tool name - ONLY use if question is {domain_name} related]
+Action Input: [input]
+Observation: [result]
+Thought: I now have the answer
+Final Answer: [user-friendly summary OR polite decline explanation]
+
+Question: {{input}}
+Thought: {{agent_scratchpad}}"""
+
+
 
 class GraphQLTypeDetailInput(BaseModel):
     """Input for GraphQL type detail tool."""

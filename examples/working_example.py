@@ -32,6 +32,7 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from graphql_agent import create_graphql_toolkit
+from graphql_agent.tools import create_react_agent_prompt
 
 
 class GraphQLAgent:
@@ -69,56 +70,22 @@ class GraphQLAgent:
         """Setup the LangChain agent."""
         
         # IMPORTANT: This prompt is specifically tailored for SubQuery Network example
-        # For your own project, customize this prompt to reflect your specific domain:
-        # - Replace "SubQuery Network" with your project name
-        # - Update the list of capabilities to match your indexed data
-        # - Adjust the decline message to be appropriate for your use case
+        # For your own project, customize these parameters:
+        # - Replace domain_name with your project name
+        # - Update domain_capabilities to match your indexed data
+        # - Adjust decline_message to be appropriate for your use case
         # See README.md "Custom Agent Prompts" section for guidance
-        prompt_template = """You are a GraphQL assistant specialized in SubQuery Network data queries. You can help users find information about:
-- Blockchain indexers and their status, performance, and rewards
-- Projects, deployments, and project metadata
-- Staking rewards, delegations, and era performance
-- Network statistics, governance, and protocol data
-- Withdrawal requests and commission tracking
-
-Available tools:
-{tools}
-
-Tool names: {tool_names}
-
-IMPORTANT: Before using any tools, evaluate if the user's question relates to SubQuery Network data.
-
-IF NOT RELATED to SubQuery Network (general questions, other blockchains, personal advice, programming help, etc.):
-- DO NOT use any tools
-- Politely decline with: "I'm specialized in SubQuery Network data queries. I can help you with indexers, projects, staking rewards, and network statistics, but I cannot assist with [their topic]. Please ask me about SubQuery Network data instead."
-
-IF RELATED to SubQuery Network data:
-WORKFLOW:
-1. Call graphql_schema_info ONCE to get raw schema and PostGraphile rules
-2. Analyze the raw schema to identify @entity types and available fields  
-3. Construct GraphQL queries using PostGraphile patterns - DO NOT call schema tool again
-4. MANDATORY: Always validate queries with graphql_query_validator before executing
-5. MANDATORY: After successful validation, MUST execute the query with graphql_execute to get actual data
-6. If validation fails, you may use graphql_type_detail as FALLBACK to check specific types
-7. Provide clear, helpful responses to users based on execution results
-
-CRITICAL: Query validation is NOT the final answer. You MUST execute the validated query to get actual data for the user.
-
-ADDITIONAL RULES:
-- When users ask about "my rewards", "my data", etc. without providing addresses/IDs, you MUST ask for the missing information first
-- NEVER fabricate or assume wallet addresses, indexer IDs, or other user-specific data
-
-Format:
-Question: {input}
-Thought: [First: Is this about SubQuery Network data (indexers, projects, rewards, staking, etc.)? If NO, go directly to Final Answer with polite decline. If YES, plan your approach and proceed with workflow]
-Action: [tool name - ONLY use if question is SubQuery Network related]
-Action Input: [input]
-Observation: [result]
-Thought: I now have the answer
-Final Answer: [user-friendly summary OR polite decline explanation]
-
-Question: {input}
-Thought: {agent_scratchpad}"""
+        prompt_template = create_react_agent_prompt(
+            domain_name="SubQuery Network",
+            domain_capabilities=[
+                "Blockchain indexers and their status, performance, and rewards",
+                "Projects, deployments, and project metadata",
+                "Staking rewards, delegations, and era performance", 
+                "Network statistics, governance, and protocol data",
+                "Withdrawal requests and commission tracking"
+            ],
+            decline_message="I'm specialized in SubQuery Network data queries. I can help you with indexers, projects, staking rewards, and network statistics, but I cannot assist with [their topic]. Please ask me about SubQuery Network data instead."
+        )
 
         prompt = PromptTemplate(
             template=prompt_template,

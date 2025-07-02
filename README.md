@@ -373,24 +373,19 @@ source = GraphQLSource(
 **Important**: The example prompts are specifically tailored for the SubQuery Network example to help the LLM accurately determine its capabilities. You should customize the prompt for your specific project:
 
 ```python
+from graphql_agent.tools import create_react_agent_prompt
+
 # Customize this prompt for your project's domain
-prompt_template = """You are a GraphQL assistant specialized in [YOUR PROJECT] data queries. You can help users find information about:
-- [List your project's main entities and use cases]
-- [Specific data types your project indexes]
-- [Key relationships and metrics available]
-
-Available tools: {tools}
-Tool names: {tool_names}
-
-IMPORTANT: Before using any tools, evaluate if the user's question relates to [YOUR PROJECT] data.
-
-IF NOT RELATED to [YOUR PROJECT] (general questions, other projects, personal advice, etc.):
-- DO NOT use any tools  
-- Politely decline with: "I'm specialized in [YOUR PROJECT] data queries. I can help you with [list key capabilities], but I cannot assist with [their topic]. Please ask me about [YOUR PROJECT] data instead."
-
-IF RELATED to [YOUR PROJECT] data:
-[Rest of workflow remains the same]
-"""
+prompt_template = create_react_agent_prompt(
+    domain_name="[YOUR PROJECT NAME]",
+    domain_capabilities=[
+        "[Main entity type 1 and its use cases]",
+        "[Main entity type 2 and its use cases]", 
+        "[Key relationships and metrics available]",
+        "[Specific data types your project indexes]"
+    ],
+    decline_message="I'm specialized in [YOUR PROJECT] data queries. I can help you with [list key capabilities], but I cannot assist with [their topic]. Please ask me about [YOUR PROJECT] data instead."
+)
 ```
 
 **Why Domain-Specific Prompts Matter:**
@@ -400,9 +395,31 @@ IF RELATED to [YOUR PROJECT] data:
 - **Professional Responses**: Consistent, helpful decline messages for out-of-scope requests
 
 **Example Customizations:**
-- **DeFi Project**: "specialized in DeFi protocol data... trading volumes, liquidity pools, yield farming..."
-- **NFT Marketplace**: "specialized in NFT marketplace data... collections, sales, floor prices..."  
-- **Gaming Project**: "specialized in blockchain gaming data... players, items, achievements..."
+```python
+# DeFi Protocol Example
+prompt = create_react_agent_prompt(
+    domain_name="DeFi Protocol",
+    domain_capabilities=[
+        "Trading volumes and liquidity pool data",
+        "Yield farming rewards and APY calculations", 
+        "Token swaps and price movements",
+        "Staking and governance participation"
+    ],
+    decline_message="I'm specialized in DeFi protocol data queries..."
+)
+
+# NFT Marketplace Example  
+prompt = create_react_agent_prompt(
+    domain_name="NFT Marketplace",
+    domain_capabilities=[
+        "NFT collections and metadata",
+        "Sales history and floor prices",
+        "Creator royalties and marketplace fees", 
+        "Trading volume and market trends"
+    ],
+    decline_message="I'm specialized in NFT marketplace data queries..."
+)
+```
 
 ## Development
 
