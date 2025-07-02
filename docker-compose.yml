@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  subql-graphql-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - IPFS_API_URL=${IPFS_API_URL:-https://unauthipfs.subquery.network/ipfs/api/v0}
+    volumes:
+      # Persist project data
+      - ./projects:/app/projects
+      # Optional: mount env file
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

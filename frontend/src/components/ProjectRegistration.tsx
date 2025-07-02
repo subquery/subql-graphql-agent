@@ -24,10 +24,15 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
       return;
     }
 
+    if (!endpoint.trim()) {
+      alert('Please enter a GraphQL endpoint URL');
+      return;
+    }
+
     try {
       await registerProject.mutateAsync({ 
         cid: cid.trim(),
-        endpoint: endpoint.trim() || undefined,
+        endpoint: endpoint.trim(),
       });
       setCid('');
       setEndpoint('');
@@ -39,6 +44,8 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
   };
 
   const isValidCid = cid.trim() && validateCid(cid.trim());
+  const isValidEndpoint = endpoint.trim() && endpoint.trim().startsWith('http');
+  const isFormValid = isValidCid && isValidEndpoint;
 
   return (
     <div className="space-y-4">
@@ -56,7 +63,7 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
           <div className="card-header">
             <h3 className="card-title">Register SubQuery Project</h3>
             <p className="card-description">
-              Enter the IPFS CID of your SubQuery project manifest and its GraphQL endpoint
+              Enter the IPFS CID of your SubQuery project manifest and the GraphQL endpoint URL
             </p>
           </div>
           <div className="card-content">
@@ -96,19 +103,38 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
 
               <div className="space-y-2">
                 <label htmlFor="endpoint" className="text-sm font-medium">
-                  GraphQL Endpoint (Optional)
+                  GraphQL Endpoint <span className="text-red-500">*</span>
                 </label>
-                <input
-                  id="endpoint"
-                  type="url"
-                  value={endpoint}
-                  onChange={(e) => setEndpoint(e.target.value)}
-                  placeholder="https://api.subquery.network/sq/your-project..."
-                  className="input"
-                  disabled={registerProject.isPending}
-                />
+                <div className="relative">
+                  <input
+                    id="endpoint"
+                    type="url"
+                    value={endpoint}
+                    onChange={(e) => setEndpoint(e.target.value)}
+                    placeholder="https://api.subquery.network/sq/your-project..."
+                    className="input pr-10"
+                    disabled={registerProject.isPending}
+                    required
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {registerProject.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    ) : endpoint.trim() ? (
+                      isValidEndpoint ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                      )
+                    ) : null}
+                  </div>
+                </div>
+                {endpoint.trim() && !isValidEndpoint && (
+                  <p className="text-sm text-red-500">
+                    Please enter a valid HTTP/HTTPS URL
+                  </p>
+                )}
                 <p className="text-xs text-gray-500">
-                  If not provided, we'll try to detect it from the project manifest or use SubQuery Network defaults
+                  The GraphQL endpoint URL for your SubQuery project
                 </p>
               </div>
 
@@ -128,7 +154,7 @@ export function ProjectRegistration({ onSuccess }: ProjectRegistrationProps) {
               <div className="flex space-x-3">
                 <button
                   type="submit"
-                  disabled={!isValidCid || registerProject.isPending}
+                  disabled={!isFormValid || registerProject.isPending}
                   className="btn-primary flex-1"
                 >
                   {registerProject.isPending ? (

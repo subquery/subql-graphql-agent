@@ -360,7 +360,7 @@ class ProjectManager:
         with open(file, "w") as f:
             json.dump(asdict(config), f, indent=2)
     
-    async def register_project(self, user_id: str, cid: str, endpoint: Optional[str] = None) -> ProjectConfig:
+    async def register_project(self, user_id: str, cid: str, endpoint: str) -> ProjectConfig:
         """Register a new project from IPFS CID for a specific user."""
         if user_id in self.projects and cid in self.projects[user_id]:
             return self.projects[user_id][cid]
@@ -374,13 +374,6 @@ class ProjectManager:
             except yaml.YAMLError:
                 manifest = json.loads(manifest_content)
             schema_path = manifest.get('schema', {}).get('file', 'schema.graphql')
-            if not endpoint:
-                if 'network' in manifest and 'endpoint' in manifest['network']:
-                    endpoint = manifest['network']['endpoint']
-                elif 'endpoint' in manifest:
-                    endpoint = manifest['endpoint']
-                else:
-                    endpoint = f"https://api.subquery.network/sq/{cid}"
             if schema_path.startswith('http'):
                 print(f"🔍 Fetching schema from external URL: {schema_path}")
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -556,7 +549,7 @@ class GraphQLAgent:
             agent=agent,
             tools=self.tools,
             verbose=True,
-            max_iterations=6,
+            max_iterations=20,
             max_execution_time=180,
             handle_parsing_errors="After calling graphql_execute and getting results, you must provide:\nThought: I have the query results\nFinal Answer: [user-friendly summary of the data]",
             return_intermediate_steps=True
@@ -592,9 +585,17 @@ class GraphQLAgent:
                         # Chunked yield for observation (tool output)
                         if observation:
                             yield "\n[Tool Output]:\n"
+                            
+                            # Truncate graphql_schema_info tool output to reduce token usage
+                            display_observation = observation
+                            if action and hasattr(action, 'tool') and action.tool == 'graphql_schema_info':
+                                max_length = 2000  # Limit schema info output
+                                if len(observation) > max_length:
+                                    display_observation = observation[:max_length] + f"\n\n... [Output truncated after {max_length} characters to save tokens. Full schema info available but not displayed.]"
+                            
                             idx = 0
-                            while idx < len(observation):
-                                chunk = observation[idx:idx+chunk_size]
+                            while idx < len(display_observation):
+                                chunk = display_observation[idx:idx+chunk_size]
                                 yield chunk
                                 idx += chunk_size
                         yield "\n\n"
@@ -658,7 +659,7 @@ app.add_middleware(
 # Pydantic models for API
 class RegisterProjectRequest(BaseModel):
     cid: str = Field(..., description="IPFS CID of the SubQuery project manifest")
-    endpoint: Optional[str] = Field(None, description="GraphQL endpoint URL (optional, will be auto-detected from manifest if not provided)")
+    endpoint: str = Field(..., description="GraphQL endpoint URL for the SubQuery project")
 
 class RegisterProjectResponse(BaseModel):
     cid: str

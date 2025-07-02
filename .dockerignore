@@ -1,0 +1,44 @@
+# Frontend assets
+frontend/
+node_modules/
+
+# Development files
+.git/
+.gitignore
+*.md
+DEVELOPMENT.md
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project data (will be mounted as volume)
+projects/
+
+# Working examples (not needed in container)
+examples/working_example.py
+examples/schema.graphql
+
+# Development dependencies
+.env.example

@@ -50,7 +50,7 @@ class GraphQLAgent:
         model_name = os.getenv("LLM_MODEL", "gpt-4o-mini")  # Default to gpt-4o-mini
         self.llm = ChatOpenAI(
             model=model_name,
-            temperature=0
+            temperature=1
         )
         print(f"🤖 Using LLM model: {model_name}")
         

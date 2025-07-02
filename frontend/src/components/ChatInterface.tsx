@@ -16,42 +16,79 @@ interface ChatInterfaceProps {
 function ThinkBlock({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false); // 默认展开
   const contentRef = useRef<HTMLDivElement>(null);
+  const userIsScrollingRef = useRef(false);
+  const lastContentUpdateRef = useRef(Date.now());
+  const autoScrollTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // 极速响应内容变化
+  // 检测用户是否在底部附近（阈值为30px）
+  const isNearBottom = () => {
+    if (!contentRef.current) return true;
+    const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
+    return scrollHeight - scrollTop - clientHeight < 30;
+  };
+
+  // 滚动到底部的函数
+  const scrollToBottom = () => {
+    if (contentRef.current && !userIsScrollingRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  };
+
+  // 用户滚动检测
   useEffect(() => {
     if (!collapsed && contentRef.current) {
-      const scrollToBottom = () => {
-        if (contentRef.current) {
-          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+      const handleScroll = () => {
+        if (!contentRef.current) return;
+        
+        // 检测用户是否主动滚动离开底部
+        if (!isNearBottom()) {
+          userIsScrollingRef.current = true;
+          // 用户滚动后3秒内不自动滚动
+          clearTimeout(autoScrollTimeoutRef.current);
+          autoScrollTimeoutRef.current = setTimeout(() => {
+            // 只有在用户回到底部附近时才重新启用自动滚动
+            if (isNearBottom()) {
+              userIsScrollingRef.current = false;
+            }
+          }, 3000);
+        } else {
+          // 用户在底部附近，允许自动滚动
+          userIsScrollingRef.current = false;
         }
       };
+
+      contentRef.current.addEventListener('scroll', handleScroll, { passive: true });
       
-      // 立即滚动
-      scrollToBottom();
+      return () => {
+        contentRef.current?.removeEventListener('scroll', handleScroll);
+        clearTimeout(autoScrollTimeoutRef.current);
+      };
+    }
+  }, [collapsed]);
+
+  // 内容变化时的响应
+  useEffect(() => {
+    if (!collapsed && contentRef.current) {
+      lastContentUpdateRef.current = Date.now();
       
-      // 连续快速滚动确保到位
-      requestAnimationFrame(scrollToBottom);
-      setTimeout(scrollToBottom, 1);
-      setTimeout(scrollToBottom, 10);
-      
-      return () => {};
+      // 只有在用户没有主动滚动或在底部附近时才自动滚动
+      if (!userIsScrollingRef.current || isNearBottom()) {
+        userIsScrollingRef.current = false; // 重置状态
+        requestAnimationFrame(scrollToBottom);
+      }
     }
   }, [children, collapsed]);
 
-  // 高效快速滚动机制
+  // 智能自动滚动机制 - 只在内容活跃更新时启用
   useEffect(() => {
     if (!collapsed && contentRef.current) {
-      const scrollToBottom = () => {
-        if (contentRef.current) {
-          contentRef.current.scrollTop = contentRef.current.scrollHeight;
-        }
-      };
-
-      // 1. MutationObserver 立即响应内容变化
+      // 1. MutationObserver 响应内容变化
       const observer = new MutationObserver(() => {
-        scrollToBottom();
-        // 额外确保滚动到位
-        requestAnimationFrame(scrollToBottom);
+        lastContentUpdateRef.current = Date.now();
+        // 只有在允许的情况下才滚动
+        if (!userIsScrollingRef.current || isNearBottom()) {
+          requestAnimationFrame(scrollToBottom);
+        }
       });
 
       observer.observe(contentRef.current, {
@@ -60,19 +97,27 @@ function ThinkBlock({ children }: { children: React.ReactNode }) {
         characterData: true
       });
 
-      // 2. 高频定时器 (每25ms, 40fps)
-      const fastInterval = setInterval(scrollToBottom, 25);
+      // 2. 定时检查 - 降低频率，只在内容活跃时滚动
+      const checkInterval = setInterval(() => {
+        const timeSinceLastUpdate = Date.now() - lastContentUpdateRef.current;
+        // 只有在最近500ms内有内容更新时才继续自动滚动
+        if (timeSinceLastUpdate < 500 && (!userIsScrollingRef.current || isNearBottom())) {
+          scrollToBottom();
+        }
+      }, 100); // 降低到100ms间隔
 
       // 3. ResizeObserver 监听容器大小变化
       const resizeObserver = new ResizeObserver(() => {
-        scrollToBottom();
+        if (!userIsScrollingRef.current || isNearBottom()) {
+          scrollToBottom();
+        }
       });
       resizeObserver.observe(contentRef.current);
 
       return () => {
         observer.disconnect();
         resizeObserver.disconnect();
-        clearInterval(fastInterval);
+        clearInterval(checkInterval);
       };
     }
   }, [collapsed]);
@@ -137,7 +182,6 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
   } = useChat(projectCid, messages, onMessagesChange);
   
   const [input, setInput] = useState('');
-  const [useStreaming, setUseStreaming] = useState(true);
   const [dataLimit, setDataLimit] = useState(10);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -173,12 +217,7 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
     const message = input.trim();
     setInput('');
     
-    if (useStreaming) {
-      await sendStreamingMessage(message, dataLimit);
-    } else {
-      // For now, we'll use streaming by default
-      await sendStreamingMessage(message, dataLimit);
-    }
+    await sendStreamingMessage(message, dataLimit);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -318,47 +357,30 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
             </div>
           </div>
           
-          {/* Options */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center space-x-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={useStreaming}
-                    onChange={(e) => setUseStreaming(e.target.checked)}
-                    className="rounded border-border"
-                  />
-                  <span>Stream responses</span>
-                </label>
-              </div>
-              <div className="text-gray-500">
-                Press Enter to send, Shift+Enter for new line
-              </div>
-            </div>
-            
-            {/* Data Limit Slider */}
-            <div className="flex items-center space-x-3 text-sm">
-              <label className="text-gray-700 font-medium min-w-fit">
-                Query limit:
+          {/* Data Limit Control */}
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-2">
+              <label className="text-gray-600 font-medium text-xs">
+                Limit:
               </label>
-              <div className="flex-1 flex items-center space-x-3">
-                <span className="text-gray-500 text-xs">1</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-gray-400 text-xs">1</span>
                 <input
                   type="range"
                   min="1"
                   max="50"
                   value={dataLimit}
                   onChange={(e) => setDataLimit(parseInt(e.target.value))}
-                  className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  className="w-20 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
                 />
-                <span className="text-gray-500 text-xs">50</span>
-              </div>
-              <div className="min-w-fit">
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                  {dataLimit} records
+                <span className="text-gray-400 text-xs">50</span>
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium min-w-fit">
+                  {dataLimit}
                 </span>
               </div>
+            </div>
+            <div className="text-gray-500 text-xs">
+              Press Enter to send, Shift+Enter for new line
             </div>
           </div>
         </form>

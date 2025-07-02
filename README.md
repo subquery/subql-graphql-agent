@@ -663,8 +663,74 @@ executor = AgentExecutor(
 
 1. **Schema Caching**: Schemas are automatically cached for 1 hour
 2. **Query Optimization**: Use pagination and specific field selection
-3. **Model Selection**: gpt-4o or stronger models recommended for best performance (gpt-4o-mini works but may have limitations)
+3. **Model Selection**: See model comparison below for performance guidance
 4. **Rate Limiting**: Monitor OpenAI API usage to avoid limits
+
+## Model Performance Comparison
+
+Based on comprehensive testing, here's how different LLM models perform with this GraphQL agent:
+
+| Model | Performance | Query Accuracy | Complex Reasoning | Cost Efficiency | Recommendation |
+|-------|-------------|----------------|-------------------|-----------------|----------------|
+| **GPT-4o** | ⭐⭐⭐⭐⭐ | Excellent | Excellent | Good | **Recommended** |
+| **DeepSeek V3** | ⭐⭐⭐⭐ | Very Good | Very Good | Excellent | **Cost-Effective** |
+| **GPT-4.1** | ⭐⭐⭐⭐ | Very Good | Good | Fair | **Solid Choice** |
+| **GPT-4.1-mini** | ⭐⭐⭐ | Good | Fair | Very Good | **Budget Option** |
+| **GPT-4o-mini** | ⭐⭐ | Fair | Limited | Excellent | **Basic Use Only** |
+
+### Model-Specific Notes
+
+#### GPT-4o (Recommended)
+- **Best Overall**: Highest accuracy for complex GraphQL query construction
+- **Complex Reasoning**: Excellent at understanding nested relationships and PostGraphile patterns
+- **Error Recovery**: Superior at fixing validation errors and adapting queries
+- **Use Case**: Production environments requiring high reliability
+
+#### DeepSeek V3 (Cost-Effective Alternative)
+- **Best Value**: Excellent performance at significantly lower cost
+- **Strong Understanding**: Very good at GraphQL patterns and entity relationships
+- **Competitive Quality**: Nearly matches GPT-4o performance for most queries
+- **Use Case**: High-volume applications where cost efficiency matters
+
+#### GPT-4.1
+- **Solid Performance**: Reliable for most standard GraphQL operations
+- **Good Reasoning**: Handles moderate complexity well
+- **Stable Results**: Consistent performance across different query types
+- **Use Case**: General purpose applications with moderate complexity
+
+#### GPT-4.1-mini
+- **Budget Friendly**: Decent performance for simple to moderate queries
+- **Limited Complex Reasoning**: Struggles with advanced relationship navigation
+- **Basic Validation**: Can handle straightforward GraphQL patterns
+- **Use Case**: Development/testing environments or simple query scenarios
+
+#### GPT-4o-mini (Basic Use Only)
+- **Lowest Cost**: Most economical option but with significant limitations
+- **Limited Capability**: Struggles with complex GraphQL schema understanding
+- **Simple Queries Only**: Best suited for basic entity retrieval
+- **Use Case**: Very basic queries or development experiments
+
+### Recommendation Guidelines
+
+**For Production Use:**
+```bash
+export LLM_MODEL="gpt-4o"  # Best reliability and accuracy
+```
+
+**For Cost-Conscious Production:**
+```bash
+export LLM_MODEL="deepseek-v3"  # Excellent value proposition
+```
+
+**For Development/Testing:**
+```bash
+export LLM_MODEL="gpt-4.1-mini"  # Good balance for non-production
+```
+
+**For Basic Experimentation:**
+```bash
+export LLM_MODEL="gpt-4o-mini"  # Lowest cost for simple tests
+```
 
 ## Production Deployment
 

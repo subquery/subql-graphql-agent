@@ -17,7 +17,7 @@ export interface ProjectConfig {
 
 export interface RegisterProjectRequest {
   cid: string;
-  endpoint?: string;
+  endpoint: string;
 }
 
 export interface RegisterProjectResponse {
