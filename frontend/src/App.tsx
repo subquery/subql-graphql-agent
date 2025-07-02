@@ -5,7 +5,7 @@ import { ProjectList } from './components/ProjectList';
 import { ProjectConfig } from './components/ProjectConfig';
 import { ChatInterface } from './components/ChatInterface';
 import { HealthStatus } from './components/HealthStatus';
-import { Database, MessageCircle, Settings } from 'lucide-react';
+import { Database, MessageCircle, Settings, HelpCircle, X, Info, Zap } from 'lucide-react';
 import type { ChatMessage } from './types';
 
 // Create a client
@@ -21,6 +21,7 @@ const queryClient = new QueryClient({
 function AppContent() {
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'chat' | 'config'>('chat');
+  const [showBestPractices, setShowBestPractices] = useState(false);
   // Store chat messages per project
   const [projectChatMessages, setProjectChatMessages] = useState<Record<string, ChatMessage[]>>({});
 
@@ -66,8 +67,20 @@ function AppContent() {
               </div>
             </div>
             
-            {/* Server Status */}
-            <HealthStatus />
+            <div className="flex items-center space-x-3">
+              {/* Best Practices Button */}
+              <button
+                onClick={() => setShowBestPractices(true)}
+                className="flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                title="View best practices for optimal performance"
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span>Best Practices</span>
+              </button>
+              
+              {/* Server Status */}
+              <HealthStatus />
+            </div>
           </div>
         </div>
       </header>
@@ -163,6 +176,93 @@ function AppContent() {
           </div>
         </div>
       </div>
+
+      {/* Best Practices Modal */}
+      {showBestPractices && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div className="flex items-center space-x-2">
+                <HelpCircle className="w-5 h-5 text-blue-600" />
+                <h2 className="text-xl font-semibold">Best Practices for Optimal Performance</h2>
+              </div>
+              <button
+                onClick={() => setShowBestPractices(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="flex items-start space-x-3">
+                <Database className="w-6 h-6 text-blue-600 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Schema Documentation</h3>
+                  <p className="text-gray-700 mb-3">
+                    Add descriptive comments to your entity schema to explain each entity and field purpose. 
+                    Well-documented schemas help the AI understand your data structure better and generate more accurate queries.
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded-md text-sm font-mono">
+                    <div className="text-gray-600">""" Example: """</div>
+                    <div className="text-green-600">"""</div>
+                    <div className="text-green-600">User account entity with staking information</div>
+                    <div className="text-green-600">"""</div>
+                    <div>type Account @entity {"{"}</div>
+                    <div className="ml-4">
+                      <div className="text-green-600">"""Unique wallet address"""</div>
+                      <div>id: ID!</div>
+                      <div className="text-green-600">"""Total staked amount in tokens"""</div>
+                      <div>stakedAmount: BigInt!</div>
+                    </div>
+                    <div>{"}"}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
+                <Zap className="w-6 h-6 text-blue-600 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Model Selection & Performance</h3>
+                  <div className="space-y-2 text-gray-700">
+                    <p><strong>For best accuracy:</strong> Use stronger models like GPT-4o or DeepSeek V3</p>
+                    <p><strong>For faster responses:</strong> Use faster models and limit data output quantities</p>
+                    <p><strong>Balance is key:</strong> Choose the right trade-off between model capability and response speed</p>
+                  </div>
+                  <div className="mt-3 bg-blue-50 p-3 rounded-md">
+                    <div className="text-sm font-medium text-blue-900 mb-2">Model Recommendations:</div>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <div>• <strong>Production:</strong> GPT-4o (best reliability)</div>
+                      <div>• <strong>Cost-effective:</strong> DeepSeek V3 (excellent value)</div>
+                      <div>• <strong>Development:</strong> GPT-4.1-mini (budget-friendly)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-start space-x-3">
+                <Info className="w-6 h-6 text-blue-600 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-lg mb-2">Query Optimization</h3>
+                  <div className="space-y-2 text-gray-700">
+                    <p>Use the data limit slider in chat to control result sizes. Smaller limits provide faster responses, while larger limits give more comprehensive data.</p>
+                    <p>Start with smaller limits (5-10 records) for exploration, then increase as needed for detailed analysis.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="border-t p-4 text-center">
+              <button
+                onClick={() => setShowBestPractices(false)}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
