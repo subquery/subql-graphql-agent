@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectRegistration } from './components/ProjectRegistration';
 import { ProjectList } from './components/ProjectList';

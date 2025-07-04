@@ -43,11 +43,11 @@ export interface ChatMessage {
 
 export interface ChatCompletionRequest {
   model: string;
-  messages: ChatMessage[];
+  messages: { role: string; content: string; }[];
   stream: boolean;
-  temperature: number;
+  temperature?: number;
   max_tokens?: number;
-  userId: string;
+  userId?: string;
 }
 
 export interface ChatCompletionResponse {

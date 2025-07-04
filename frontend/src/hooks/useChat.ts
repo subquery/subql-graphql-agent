@@ -37,9 +37,10 @@ export function useChat(projectCid: string, messages: ChatMessage[], onMessagesC
     const conversationHistory = [
       ...messages.map(msg => ({
         role: msg.role,
-        content: msg.content
+        content: msg.content,
+        timestamp: msg.timestamp
       })),
-      { role: 'user', content }
+      { role: 'user', content, timestamp: Date.now() }
     ];
 
     const request: ChatCompletionRequest = {
@@ -97,14 +98,15 @@ export function useChat(projectCid: string, messages: ChatMessage[], onMessagesC
       const conversationHistory = [
         ...messages.map(msg => ({
           role: msg.role,
-          content: msg.content
+          content: msg.content,
+          timestamp: msg.timestamp
         })),
-        { role: 'user', content: enhancedContent }
+        { role: 'user', content: enhancedContent, timestamp: Date.now() }
       ];
 
       const request: ChatCompletionRequest = {
         model: 'gpt-4o-mini',
-        messages: conversationHistory,
+        messages: conversationHistory.map(msg => ({ role: msg.role, content: msg.content })),
         stream: true,
       };
 

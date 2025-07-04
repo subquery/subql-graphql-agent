@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, MessageCircle, Trash2, RotateCcw } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Send, Loader2, MessageCircle, Trash2 } from 'lucide-react';
 import { useChat } from '../hooks/useChat';
 import { useProject } from '../hooks/useProjects';
 import { formatTimestamp, formatCid } from '../lib/utils';
@@ -18,7 +18,7 @@ function ThinkBlock({ children }: { children: React.ReactNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const userIsScrollingRef = useRef(false);
   const lastContentUpdateRef = useRef(Date.now());
-  const autoScrollTimeoutRef = useRef<NodeJS.Timeout>();
+  const autoScrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // 检测用户是否在底部附近（阈值为30px）
   const isNearBottom = () => {
@@ -274,7 +274,7 @@ export function ChatInterface({ projectCid, messages, onMessagesChange, onClearM
             
             <div className="space-y-2 max-w-md mx-auto">
               <p className="text-sm font-medium text-left">Try asking:</p>
-              {suggestedQuestions.map((question, index) => (
+              {suggestedQuestions.map((question: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => setInput(question)}

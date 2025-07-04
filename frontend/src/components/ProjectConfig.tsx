@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useProject, useUpdateProjectConfig, useDeleteProject } from '../hooks/useProjects';
 import { Settings, Save, X, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { formatCid } from '../lib/utils';
@@ -221,7 +221,7 @@ export function ProjectConfig({ cid, onProjectDeleted }: ProjectConfigProps) {
           <label className="text-sm font-medium">Domain Capabilities</label>
           {isEditing ? (
             <div className="space-y-3">
-              {capabilities.map((capability, index) => (
+              {capabilities.map((capability: string, index: number) => (
                 <div key={index} className="flex space-x-2">
                   <input
                     type="text"
@@ -249,7 +249,7 @@ export function ProjectConfig({ cid, onProjectDeleted }: ProjectConfigProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {project.domain_capabilities.map((capability, index) => (
+              {project.domain_capabilities.map((capability: string, index: number) => (
                 <div key={index} className="p-3 bg-muted rounded-md text-sm">
                   • {capability}
                 </div>
@@ -286,7 +286,7 @@ export function ProjectConfig({ cid, onProjectDeleted }: ProjectConfigProps) {
           </p>
           {isEditing ? (
             <div className="space-y-3">
-              {suggestedQuestions.map((question, index) => (
+              {suggestedQuestions.map((question: string, index: number) => (
                 <div key={index} className="flex space-x-2">
                   <input
                     type="text"
@@ -314,7 +314,7 @@ export function ProjectConfig({ cid, onProjectDeleted }: ProjectConfigProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {project?.suggested_questions.map((question, index) => (
+              {project?.suggested_questions.map((question: string, index: number) => (
                 <div key={index} className="p-3 bg-muted rounded-md text-sm">
                   • {question}
                 </div>

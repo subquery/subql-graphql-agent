@@ -2,9 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../services/api';
 import type { 
   RegisterProjectRequest, 
-  UpdateProjectConfigRequest,
-  Project,
-  ProjectConfig
+  UpdateProjectConfigRequest
 } from '../types';
 
 export function useProjects() {

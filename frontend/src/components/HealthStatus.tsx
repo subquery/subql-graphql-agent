@@ -1,4 +1,3 @@
-import React from 'react';
 import { useHealth } from '../hooks/useProjects';
 import { Activity, AlertTriangle, Loader2 } from 'lucide-react';
 

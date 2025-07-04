@@ -1,33 +1,47 @@
-name: Prod
+name: Production Build & Deploy
+
 on:
   workflow_dispatch:
+  push:
     branches:
       - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/prod-build.yml'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
       VITE_API_URL: ${{ vars.API_URL }}
       NODE_OPTIONS: --max-old-space-size=32768
+
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v2.4.1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
 
-      - working-directory: frontend
-        run: npm i
-
-      - name: Build
-        run: npm run build
+      - name: Install dependencies
         working-directory: frontend
+        run: npm ci
 
-      - name: Deploy Prod
+      - name: Type check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Build application
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy to S3
         uses: reggionick/s3-deploy@v3
         with:
           folder: frontend/dist
