@@ -21,6 +21,7 @@ __pycache__/
 # Virtual environments
 venv/
 env/
+.venv/
 .env
 
 # IDE files
@@ -42,3 +43,6 @@ examples/schema.graphql
 
 # Development dependencies
 .env.example
+
+# frontend will be published separately
+frontend

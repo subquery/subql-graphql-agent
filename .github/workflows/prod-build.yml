@@ -1,0 +1,40 @@
+name: Prod
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+      VITE_API_URL: ${{ vars.API_URL }}
+      NODE_OPTIONS: --max-old-space-size=32768
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v2.4.1
+        with:
+          node-version: 22
+
+      - working-directory: frontend
+        run: npm i
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
+      - name: Deploy Prod
+        uses: reggionick/s3-deploy@v3
+        with:
+          folder: frontend/dist
+          bucket: graphql-agent-app.subquery.network
+          bucket-region: ap-east-1
+          invalidation: /*
+          dist-id: ${{ secrets.CLOUDFRONT_ID_PROD }}
+          delete-removed: false
+          no-cache: false
+          private: true
